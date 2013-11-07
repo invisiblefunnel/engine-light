@@ -2,7 +2,11 @@ require "net/http"
 require 'json'
 
 module Requester
-  def get(uri_string)
+  class RedirectLimitExceeded < StandardError; end
+
+  def get(uri_string, redirect_limit = 10)
+    raise RedirectLimitExceeded if not redirect_limit > 0
+
     uri = URI.parse(uri_string)
     response = nil
     Net::HTTP.start(uri.host, uri.port, timeout: 5) do |http|
@@ -11,12 +15,7 @@ module Requester
     end
     case response
     when Net::HTTPRedirection
-      redirect_uri = URI.parse(response['Location'])
-      Net::HTTP.start(redirect_uri.host, redirect_uri.port, timeout: 5) do |http|
-        request = Net::HTTP::Get.new redirect_uri
-        response = http.request request
-      end
-      JSON.parse response.body
+      get response['Location'], redirect_limit - 1
     when Net::HTTPSuccess
       JSON.parse response.body
     else
